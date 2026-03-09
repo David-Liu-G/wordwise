@@ -12,13 +12,14 @@ interface StudyViewProps {
   onBack: () => void;
 }
 
-// Rounds: learn1 (full card) → learn2 (recall) → learn3 (quick flash) → quiz
-type Round = 'learn1' | 'learn2' | 'learn3' | 'quiz';
+// Rounds: learn1a (full card) → learn1b (full card again, reshuffled) → learn2 (recall) → learn3 (quick flash) → quiz
+type Round = 'learn1a' | 'learn1b' | 'learn2' | 'learn3' | 'quiz';
 
 const ROUND_LABELS: Record<Round, { emoji: string; label: string; description: string }> = {
-  learn1: { emoji: '📖', label: '第一轮 · 认识单词', description: '仔细看每个单词的含义和例句' },
-  learn2: { emoji: '🧠', label: '第二轮 · 回忆练习', description: '看英文，想中文，点击验证' },
-  learn3: { emoji: '⚡', label: '第三轮 · 快速复习', description: '快速浏览，加深印象' },
+  learn1a: { emoji: '📖', label: '第一轮 · 认识单词', description: '仔细看每个单词的含义和例句' },
+  learn1b: { emoji: '📖', label: '第二轮 · 再看一遍', description: '打乱顺序，再认一遍加深印象' },
+  learn2: { emoji: '🧠', label: '第三轮 · 回忆练习', description: '看英文，想中文，点击验证' },
+  learn3: { emoji: '⚡', label: '第四轮 · 快速复习', description: '快速浏览，加深印象' },
   quiz: { emoji: '✍️', label: '测验', description: '检验你的学习成果' },
 };
 
@@ -40,7 +41,7 @@ function generateOptions(word: Word): string[] {
 
 export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateProgress, onBack }) => {
   // Current round and the shuffled word order for this round
-  const [round, setRound] = useState<Round>('learn1');
+  const [round, setRound] = useState<Round>('learn1a');
   const [roundWords, setRoundWords] = useState<Word[]>(() => shuffle(words));
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -54,7 +55,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
   // Track which words are done (passed quiz) and which need retry
   const [doneWords, setDoneWords] = useState<Set<string>>(new Set());
   const [retryWords, setRetryWords] = useState<Word[]>([]);
-  const [retryRound, setRetryRound] = useState<Round>('learn1');
+  const [retryRound, setRetryRound] = useState<Round>('learn2');
   const [results, setResults] = useState<{ wordId: string; firstTry: boolean }[]>([]);
 
   // Round transition splash
@@ -66,7 +67,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
 
   // Calculate overall progress
   const getOverallProgress = () => {
-    const roundWeights: Record<Round, number> = { learn1: 0, learn2: 25, learn3: 50, quiz: 75 };
+    const roundWeights: Record<Round, number> = { learn1a: 0, learn1b: 16, learn2: 32, learn3: 52, quiz: 75 };
     const baseProgress = roundWeights[round] || 0;
     const roundProgress = roundWords.length > 0 ? (currentIndex / roundWords.length) * 25 : 0;
     const doneBonus = (doneWords.size / totalWords) * 25;
@@ -89,7 +90,12 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
       }
     } else {
       // Round complete — move to next round
-      if (round === 'learn1') {
+      if (round === 'learn1a') {
+        setRound('learn1b');
+        setRoundWords(shuffle(roundWords));
+        setCurrentIndex(0);
+        setShowRoundSplash(true);
+      } else if (round === 'learn1b') {
         setRound('learn2');
         setRoundWords(shuffle(roundWords));
         setCurrentIndex(0);
@@ -275,7 +281,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
   // Round splash screen
   if (showRoundSplash) {
     const info = ROUND_LABELS[round];
-    const isRetryRound = retryWords.length > 0 && round !== 'learn1';
+    const isRetryRound = retryWords.length > 0 && round !== 'learn1a';
     return (
       <motion.div
         className="learn-view"
@@ -319,7 +325,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
   const difficultyClass = word.difficulty === 1 ? 'easy' : word.difficulty === 2 ? 'medium' : 'hard';
   const progressPercent = getOverallProgress();
   const info = ROUND_LABELS[round];
-  const handleNext = (round === 'quiz') ? undefined : (retryWords.length > 0 && round !== 'learn1' ? nextRetryWord : nextWord);
+  const handleNext = (round === 'quiz') ? undefined : (retryWords.length > 0 && round !== 'learn1a' ? nextRetryWord : nextWord);
 
   return (
     <div className="learn-view">
@@ -343,8 +349,8 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
           exit={{ opacity: 0, x: -50 }}
           transition={{ duration: 0.25 }}
         >
-          {/* LEARN ROUND 1: Full card */}
-          {round === 'learn1' && (
+          {/* LEARN ROUND 1a & 1b: Full card */}
+          {(round === 'learn1a' || round === 'learn1b') && (
             <>
               <div className="word-card">
                 <span className={`difficulty-badge ${difficultyClass}`}>{difficultyLabel}</span>
@@ -358,7 +364,10 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
                 </div>
               </div>
               <button className="nav-btn primary" onClick={handleNext} style={{ width: '100%' }}>
-                {currentIndex < roundWords.length - 1 ? '下一个 →' : '进入第二轮 →'}
+                {currentIndex < roundWords.length - 1
+                  ? '下一个 →'
+                  : round === 'learn1a' ? '进入第二轮 →' : '进入回忆练习 →'
+                }
               </button>
             </>
           )}
@@ -410,7 +419,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  {currentIndex < roundWords.length - 1 ? '下一个 →' : '进入第三轮 →'}
+                  {currentIndex < roundWords.length - 1 ? '下一个 →' : '进入快速复习 →'}
                 </motion.button>
               )}
             </>
