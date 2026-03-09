@@ -16,8 +16,9 @@ export const Header: React.FC<HeaderProps> = ({ view, onNavigate }) => {
         onClick={() => onNavigate('home')}
         style={{ cursor: 'pointer' }}
       >
-        <div className="header-logo-icon">W</div>
-        <span className="header-logo-text">WordWise</span>
+        <div className="header-logo-icon">记</div>
+        <span className="header-logo-text">记忆岛</span>
+        <span className="header-logo-subtitle">六级词汇</span>
         <span style={{ fontSize: 11, color: '#B2BEC3', fontWeight: 500, marginLeft: 4, alignSelf: 'flex-end' }}>v{APP_VERSION}</span>
       </div>
       <div className="header-streak">

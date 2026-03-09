@@ -20,8 +20,8 @@
   <path d="M 128 310 Q 128 275 165 258 L 244 225 Q 256 220 256 220 Q 256 220 268 225 L 347 258 Q 384 275 384 310 L 384 375 Q 384 392 370 398 L 268 430 Q 256 435 256 435 Q 256 435 244 430 L 142 398 Q 128 392 128 375 Z" fill="rgba(255,255,255,0.12)"/>
   <line x1="256" y1="220" x2="256" y2="435" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
 
-  <!-- Stylized W -->
-  <text x="256" y="300" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="230" font-weight="900" fill="white" letter-spacing="-10">W</text>
+  <!-- Stylized 记 character -->
+  <text x="256" y="310" text-anchor="middle" font-family="-apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif" font-size="210" font-weight="900" fill="white">记</text>
 
   <!-- Sparkle top-right -->
   <g transform="translate(375, 125)">
