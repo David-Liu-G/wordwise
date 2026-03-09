@@ -290,7 +290,7 @@
   </div>
 
   <script>
-    let API = localStorage.getItem('wordwise_admin_api') || '';
+    let API = localStorage.getItem('wordwise_admin_api') || window.location.origin;
     const urlInput = document.getElementById('apiUrl');
     urlInput.value = API;
 
