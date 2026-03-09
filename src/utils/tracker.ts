@@ -56,6 +56,19 @@ async function flushEvents() {
   }
 }
 
+// Register session on page load (so visitors appear immediately)
+export function trackPageView() {
+  if (!API_URL) return;
+  fetch(`${API_URL}/api/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId: getSessionId(),
+      events: [{ wordId: '_pageview', wordEnglish: '', wordChinese: '', action: 'pageview', level: 0 }],
+    }),
+  }).catch(() => {});
+}
+
 // Flush on page unload
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', flushEvents);

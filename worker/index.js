@@ -80,17 +80,18 @@ async function handleTrack(request, env) {
       last_seen_at = datetime('now')
   `).bind(sessionId, ip, country, city, region, timezone, userAgent).run();
 
-  // Insert progress events
-  const stmt = env.DB.prepare(`
-    INSERT INTO progress_events (session_id, word_id, word_english, word_chinese, action, level)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
+  // Insert progress events (skip pageview-only events from DB storage)
+  const realEvents = events.filter(e => e.action !== 'pageview');
+  if (realEvents.length > 0) {
+    const stmt = env.DB.prepare(`
+      INSERT INTO progress_events (session_id, word_id, word_english, word_chinese, action, level)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
 
-  const batch = events.map(e =>
-    stmt.bind(sessionId, e.wordId, e.wordEnglish || '', e.wordChinese || '', e.action, e.level || 0)
-  );
+    const batch = realEvents.map(e =>
+      stmt.bind(sessionId, e.wordId, e.wordEnglish || '', e.wordChinese || '', e.action, e.level || 0)
+    );
 
-  if (batch.length > 0) {
     await env.DB.batch(batch);
   }
 

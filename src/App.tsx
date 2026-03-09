@@ -4,6 +4,7 @@ import { AppView, Word, WordProgress } from './types';
 import { loadProgress, saveProgress, getDailyWords, saveDailyWords } from './utils/storage';
 import { selectDailyWords, getWordsForReview } from './utils/spaced-repetition';
 import { wordBank } from './data/words';
+import { trackPageView } from './utils/tracker';
 import { Header } from './components/Header';
 import { HomeView } from './components/HomeView';
 import { LearnView } from './components/LearnView';
@@ -16,6 +17,8 @@ function App() {
   const [dailyWords, setDailyWords] = useState<Word[]>([]);
 
   useEffect(() => {
+    trackPageView();
+
     // Load or generate daily words
     const saved = getDailyWords();
     if (saved) {
