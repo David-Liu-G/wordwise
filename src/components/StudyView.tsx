@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Word, WordProgress } from '../types';
 import { updateWordProgress } from '../utils/spaced-repetition';
@@ -12,14 +12,15 @@ interface StudyViewProps {
   onBack: () => void;
 }
 
-type Phase = 'intro' | 'recall' | 'quiz';
+// Rounds: learn1 (full card) → learn2 (recall) → learn3 (quick flash) → quiz
+type Round = 'learn1' | 'learn2' | 'learn3' | 'quiz';
 
-interface WordState {
-  word: Word;
-  phase: Phase;
-  attempts: number;
-  done: boolean;
-}
+const ROUND_LABELS: Record<Round, { emoji: string; label: string; description: string }> = {
+  learn1: { emoji: '📖', label: '第一轮 · 认识单词', description: '仔细看每个单词的含义和例句' },
+  learn2: { emoji: '🧠', label: '第二轮 · 回忆练习', description: '看英文，想中文，点击验证' },
+  learn3: { emoji: '⚡', label: '第三轮 · 快速复习', description: '快速浏览，加深印象' },
+  quiz: { emoji: '✍️', label: '测验', description: '检验你的学习成果' },
+};
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -38,140 +39,180 @@ function generateOptions(word: Word): string[] {
 }
 
 export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateProgress, onBack }) => {
-  const [wordStates, setWordStates] = useState<WordState[]>(() =>
-    words.map(w => ({ word: w, phase: 'intro' as Phase, attempts: 0, done: false }))
-  );
+  // Current round and the shuffled word order for this round
+  const [round, setRound] = useState<Round>('learn1');
+  const [roundWords, setRoundWords] = useState<Word[]>(() => shuffle(words));
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Recall phase state
   const [revealed, setRevealed] = useState(false);
+
+  // Quiz state
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [quizOptions, setQuizOptions] = useState<string[]>([]);
+  const [quizOptions, setQuizOptions] = useState<string[]>(() => words.length > 0 ? generateOptions(words[0]) : []);
+
+  // Track which words are done (passed quiz) and which need retry
+  const [doneWords, setDoneWords] = useState<Set<string>>(new Set());
+  const [retryWords, setRetryWords] = useState<Word[]>([]);
+  const [retryRound, setRetryRound] = useState<Round>('learn1');
+  const [results, setResults] = useState<{ wordId: string; firstTry: boolean }[]>([]);
+
+  // Round transition splash
+  const [showRoundSplash, setShowRoundSplash] = useState(true);
   const [showResults, setShowResults] = useState(false);
-  const [results, setResults] = useState<{ word: Word; correct: boolean; attempts: number }[]>([]);
 
-  const activeStates = useMemo(() => wordStates.filter(ws => !ws.done), [wordStates]);
-  const doneCount = wordStates.filter(ws => ws.done).length;
-  const totalCount = wordStates.length;
+  const totalWords = words.length;
+  const isRetrying = retryWords.length > 0 && round !== 'quiz';
 
-  const current = activeStates[currentIndex];
+  // Calculate overall progress
+  const getOverallProgress = () => {
+    const roundWeights: Record<Round, number> = { learn1: 0, learn2: 25, learn3: 50, quiz: 75 };
+    const baseProgress = roundWeights[round] || 0;
+    const roundProgress = roundWords.length > 0 ? (currentIndex / roundWords.length) * 25 : 0;
+    const doneBonus = (doneWords.size / totalWords) * 25;
+    return Math.min(100, baseProgress + roundProgress + doneBonus);
+  };
 
-  const goToNextWord = useCallback(() => {
+  const startRound = useCallback(() => {
+    setShowRoundSplash(false);
+  }, []);
+
+  const nextWord = useCallback(() => {
     setRevealed(false);
     setSelectedAnswer(null);
 
-    const remaining = wordStates.filter(ws => !ws.done);
-    if (remaining.length === 0) {
-      setShowResults(true);
-      return;
+    if (currentIndex < roundWords.length - 1) {
+      const nextIdx = currentIndex + 1;
+      setCurrentIndex(nextIdx);
+      if (round === 'quiz') {
+        setQuizOptions(generateOptions(roundWords[nextIdx]));
+      }
+    } else {
+      // Round complete — move to next round
+      if (round === 'learn1') {
+        setRound('learn2');
+        setRoundWords(shuffle(roundWords));
+        setCurrentIndex(0);
+        setShowRoundSplash(true);
+      } else if (round === 'learn2') {
+        setRound('learn3');
+        setRoundWords(shuffle(roundWords));
+        setCurrentIndex(0);
+        setShowRoundSplash(true);
+      } else if (round === 'learn3') {
+        setRound('quiz');
+        const quizOrder = shuffle(roundWords);
+        setRoundWords(quizOrder);
+        setCurrentIndex(0);
+        setQuizOptions(generateOptions(quizOrder[0]));
+        setShowRoundSplash(true);
+      }
+      // quiz round completion is handled in handleQuizAnswer
     }
-
-    // Move to next word in active list
-    const nextActive = remaining.length;
-    if (nextActive <= 1 && remaining[0]?.done !== false) {
-      setShowResults(true);
-      return;
-    }
-
-    setCurrentIndex(prev => {
-      const newActive = wordStates.filter(ws => !ws.done);
-      if (newActive.length === 0) return 0;
-      return prev >= newActive.length ? 0 : prev;
-    });
-  }, [wordStates]);
-
-  const advancePhase = useCallback(() => {
-    if (!current) return;
-    const wordId = current.word.id;
-
-    setWordStates(prev => {
-      const updated = prev.map(ws => {
-        if (ws.word.id !== wordId) return ws;
-        if (ws.phase === 'intro') {
-          return { ...ws, phase: 'recall' as Phase };
-        }
-        if (ws.phase === 'recall') {
-          return { ...ws, phase: 'quiz' as Phase };
-        }
-        return ws;
-      });
-      return updated;
-    });
-
-    setRevealed(false);
-    setSelectedAnswer(null);
-
-    // Pre-generate quiz options when moving to quiz phase
-    if (current.phase === 'recall') {
-      setQuizOptions(generateOptions(current.word));
-    }
-  }, [current]);
+  }, [currentIndex, roundWords, round]);
 
   const handleReveal = useCallback(() => {
     setRevealed(true);
+    const w = roundWords[currentIndex];
     trackEvent({
-      wordId: current.word.id,
-      wordEnglish: current.word.english,
-      wordChinese: current.word.chinese,
-      action: 'learn',
-      level: 0,
+      wordId: w.id, wordEnglish: w.english, wordChinese: w.chinese,
+      action: 'learn', level: 0,
     });
-  }, [current]);
+  }, [roundWords, currentIndex]);
 
   const handleQuizAnswer = useCallback((answer: string) => {
     if (selectedAnswer) return;
     setSelectedAnswer(answer);
 
-    const correct = answer === current.word.chinese;
-    const newProgress = updateWordProgress(progress, current.word.id, correct);
+    const word = roundWords[currentIndex];
+    const correct = answer === word.chinese;
+    const newProgress = updateWordProgress(progress, word.id, correct);
     onUpdateProgress(newProgress);
 
     trackEvent({
-      wordId: current.word.id,
-      wordEnglish: current.word.english,
-      wordChinese: current.word.chinese,
+      wordId: word.id, wordEnglish: word.english, wordChinese: word.chinese,
       action: correct ? 'quiz_correct' : 'quiz_wrong',
-      level: newProgress[current.word.id]?.level || 0,
+      level: newProgress[word.id]?.level || 0,
     });
 
     setTimeout(() => {
       if (correct) {
-        // Mark word as done
-        setResults(prev => [...prev, { word: current.word, correct: true, attempts: current.attempts + 1 }]);
-        setWordStates(prev => {
-          const updated = prev.map(ws =>
-            ws.word.id === current.word.id ? { ...ws, done: true } : ws
-          );
-          const remaining = updated.filter(ws => !ws.done);
-          if (remaining.length === 0) {
-            setShowResults(true);
-            return updated;
-          }
-          setCurrentIndex(i => i >= remaining.length ? 0 : i);
-          setSelectedAnswer(null);
-          setRevealed(false);
-          return updated;
-        });
-      } else {
-        // Reset to intro, increase attempts, move to end of queue
-        setWordStates(prev => {
-          const updated = prev.map(ws =>
-            ws.word.id === current.word.id
-              ? { ...ws, phase: 'intro' as Phase, attempts: ws.attempts + 1 }
-              : ws
-          );
-          // Move this word to the end of the active list by reordering
-          const failedWord = updated.find(ws => ws.word.id === current.word.id)!;
-          const others = updated.filter(ws => ws.word.id !== current.word.id);
-          const reordered = [...others, failedWord];
+        const newDone = new Set(doneWords);
+        newDone.add(word.id);
+        setDoneWords(newDone);
+        setResults(prev => [...prev, { wordId: word.id, firstTry: !retryWords.some(w => w.id === word.id) }]);
 
-          const remaining = reordered.filter(ws => !ws.done);
-          setCurrentIndex(i => i >= remaining.length ? 0 : i);
-          setSelectedAnswer(null);
-          setRevealed(false);
-          return reordered;
+        // Check if this was the last quiz word
+        if (currentIndex >= roundWords.length - 1) {
+          // Check if there are retry words accumulated
+          const newRetry = [...retryWords.filter(w => w.id !== word.id)];
+          if (newRetry.length > 0) {
+            // Start retry cycle: learn the failed words again, then quiz
+            setRetryWords(newRetry);
+            setRound('learn2');
+            setRoundWords(shuffle(newRetry));
+            setCurrentIndex(0);
+            setRetryRound('learn2');
+            setShowRoundSplash(true);
+          } else {
+            setShowResults(true);
+          }
+        } else {
+          const nextIdx = currentIndex + 1;
+          setCurrentIndex(nextIdx);
+          setQuizOptions(generateOptions(roundWords[nextIdx]));
+        }
+      } else {
+        // Add to retry list
+        setRetryWords(prev => {
+          if (prev.some(w => w.id === word.id)) return prev;
+          return [...prev, word];
         });
+
+        // Move to next quiz word
+        if (currentIndex >= roundWords.length - 1) {
+          // End of quiz round, but there are retry words
+          const currentRetry = retryWords.some(w => w.id === word.id) ? retryWords : [...retryWords, word];
+          setRetryWords(currentRetry);
+          setRound('learn2');
+          setRoundWords(shuffle(currentRetry));
+          setCurrentIndex(0);
+          setRetryRound('learn2');
+          setShowRoundSplash(true);
+        } else {
+          const nextIdx = currentIndex + 1;
+          setCurrentIndex(nextIdx);
+          setQuizOptions(generateOptions(roundWords[nextIdx]));
+        }
       }
+      setSelectedAnswer(null);
+      setRevealed(false);
     }, 1200);
-  }, [selectedAnswer, current, progress, onUpdateProgress]);
+  }, [selectedAnswer, roundWords, currentIndex, progress, onUpdateProgress, doneWords, retryWords]);
+
+  // Handle retry round transitions (learn2 → learn3 → quiz for retry words)
+  const nextRetryWord = useCallback(() => {
+    setRevealed(false);
+    if (currentIndex < roundWords.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      if (retryRound === 'learn2') {
+        setRetryRound('learn3');
+        setRound('learn3');
+        setRoundWords(shuffle(roundWords));
+        setCurrentIndex(0);
+        setShowRoundSplash(true);
+      } else {
+        // Back to quiz for retry words
+        setRound('quiz');
+        const quizOrder = shuffle(roundWords);
+        setRoundWords(quizOrder);
+        setCurrentIndex(0);
+        setQuizOptions(generateOptions(quizOrder[0]));
+        setShowRoundSplash(true);
+      }
+    }
+  }, [currentIndex, roundWords, retryRound]);
 
   if (words.length === 0) {
     return (
@@ -187,41 +228,38 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
     );
   }
 
+  // Results screen
   if (showResults) {
-    const correctFirst = results.filter(r => r.attempts === 1).length;
-    const percentage = Math.round((correctFirst / totalCount) * 100);
+    const firstTryCount = results.filter(r => r.firstTry).length;
+    const percentage = Math.round((firstTryCount / totalWords) * 100);
     const getMessage = () => {
       if (percentage >= 90) return { title: '太棒了！🎉', sub: '一次就记住了大部分单词！' };
       if (percentage >= 70) return { title: '做得不错！👏', sub: '大部分单词都掌握了！' };
       if (percentage >= 50) return { title: '继续加油 💪', sub: '多复习几遍会更好！' };
-      return { title: '不要气馁 ❤️', sub: '坚持就是胜利！' };
+      return { title: '全部通过！❤️', sub: '虽然有些需要多次尝试，但你坚持下来了！' };
     };
     const msg = getMessage();
 
     return (
-      <motion.div
-        className="quiz-view"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-      >
+      <motion.div className="quiz-view" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
         <div className="quiz-results">
           <div className="results-circle">
-            <div className="results-score">{doneCount}</div>
-            <div className="results-label">单词已掌握</div>
+            <div className="results-score">{totalWords}</div>
+            <div className="results-label">全部掌握</div>
           </div>
           <div className="results-message">{msg.title}</div>
           <div className="results-submessage">{msg.sub}</div>
           <div className="results-stats">
             <div className="results-stat">
-              <div className="results-stat-value green">{correctFirst}</div>
+              <div className="results-stat-value green">{firstTryCount}</div>
               <div className="results-stat-label">一次通过</div>
             </div>
             <div className="results-stat">
-              <div className="results-stat-value red">{totalCount - correctFirst}</div>
+              <div className="results-stat-value red">{totalWords - firstTryCount}</div>
               <div className="results-stat-label">多次尝试</div>
             </div>
             <div className="results-stat">
-              <div className="results-stat-value purple">{totalCount}</div>
+              <div className="results-stat-value purple">{totalWords}</div>
               <div className="results-stat-label">总单词数</div>
             </div>
           </div>
@@ -234,15 +272,54 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
     );
   }
 
-  if (!current) return null;
+  // Round splash screen
+  if (showRoundSplash) {
+    const info = ROUND_LABELS[round];
+    const isRetryRound = retryWords.length > 0 && round !== 'learn1';
+    return (
+      <motion.div
+        className="learn-view"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, textAlign: 'center' }}
+      >
+        <button className="back-btn" onClick={onBack} style={{ alignSelf: 'flex-start' }}>← 返回</button>
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+          style={{ marginTop: 40 }}
+        >
+          <div style={{ fontSize: 64, marginBottom: 20 }}>{info.emoji}</div>
+          <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>
+            {isRetryRound ? '🔄 重新学习' : info.label}
+          </h2>
+          <p style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            {isRetryRound
+              ? `有 ${roundWords.length} 个单词需要再学一遍`
+              : info.description
+            }
+          </p>
+          <p style={{ fontSize: 14, color: 'var(--text-light)', marginBottom: 32 }}>
+            共 {roundWords.length} 个单词
+            {doneWords.size > 0 && ` · 已掌握 ${doneWords.size}/${totalWords}`}
+          </p>
+          <button className="nav-btn primary" onClick={startRound} style={{ padding: '16px 48px' }}>
+            开始 →
+          </button>
+        </motion.div>
+      </motion.div>
+    );
+  }
 
-  const progressPercent = (doneCount / totalCount) * 100;
-  const { word, phase } = current;
+  const word = roundWords[currentIndex];
+  if (!word) return null;
+
   const difficultyLabel = word.difficulty === 1 ? '基础' : word.difficulty === 2 ? '进阶' : '高级';
   const difficultyClass = word.difficulty === 1 ? 'easy' : word.difficulty === 2 ? 'medium' : 'hard';
-
-  const phaseLabel = phase === 'intro' ? '学习' : phase === 'recall' ? '回忆' : '测验';
-  const phaseEmoji = phase === 'intro' ? '📖' : phase === 'recall' ? '🧠' : '✍️';
+  const progressPercent = getOverallProgress();
+  const info = ROUND_LABELS[round];
+  const handleNext = (round === 'quiz') ? undefined : (retryWords.length > 0 && round !== 'learn1' ? nextRetryWord : nextWord);
 
   return (
     <div className="learn-view">
@@ -250,43 +327,24 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
 
       <div className="progress-bar-container">
         <div className="progress-bar-header">
-          <span>{phaseEmoji} {phaseLabel} · 第 {doneCount + 1}/{totalCount} 个单词</span>
-          <span>{doneCount} 已完成</span>
+          <span>{info.emoji} {info.label} · {currentIndex + 1}/{roundWords.length}</span>
+          <span>{doneWords.size}/{totalWords} 已掌握</span>
         </div>
         <div className="progress-bar">
           <div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
         </div>
       </div>
 
-      {current.attempts > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{
-            background: 'rgba(255, 107, 107, 0.08)',
-            color: 'var(--accent)',
-            padding: '8px 14px',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 13,
-            fontWeight: 500,
-            marginBottom: 12,
-            textAlign: 'center',
-          }}
-        >
-          🔄 再来一次！上次答错了，重新学习这个单词
-        </motion.div>
-      )}
-
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${word.id}-${phase}`}
+          key={`${word.id}-${round}-${currentIndex}`}
           initial={{ opacity: 0, x: 50 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -50 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.25 }}
         >
-          {/* INTRO PHASE */}
-          {phase === 'intro' && (
+          {/* LEARN ROUND 1: Full card */}
+          {round === 'learn1' && (
             <>
               <div className="word-card">
                 <span className={`difficulty-badge ${difficultyClass}`}>{difficultyLabel}</span>
@@ -299,14 +357,14 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
                   <div className="word-example-cn">{word.exampleCn}</div>
                 </div>
               </div>
-              <button className="nav-btn primary" onClick={advancePhase} style={{ width: '100%' }}>
-                记住了，下一步 →
+              <button className="nav-btn primary" onClick={handleNext} style={{ width: '100%' }}>
+                {currentIndex < roundWords.length - 1 ? '下一个 →' : '进入第二轮 →'}
               </button>
             </>
           )}
 
-          {/* RECALL PHASE */}
-          {phase === 'recall' && (
+          {/* LEARN ROUND 2: Recall - show English, tap to reveal Chinese */}
+          {round === 'learn2' && (
             <>
               <div className="word-card">
                 <span className={`difficulty-badge ${difficultyClass}`}>{difficultyLabel}</span>
@@ -334,10 +392,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
                     </div>
                   </motion.div>
                 ) : (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                     <div className="word-chinese">{word.chinese}</div>
                     <div className="word-example">
                       <div className="word-example-en">📝 {word.exampleEn}</div>
@@ -350,19 +405,66 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
               {revealed && (
                 <motion.button
                   className="nav-btn primary"
-                  onClick={advancePhase}
+                  onClick={handleNext}
                   style={{ width: '100%' }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  准备好了，开始测验 ✍️
+                  {currentIndex < roundWords.length - 1 ? '下一个 →' : '进入第三轮 →'}
                 </motion.button>
               )}
             </>
           )}
 
-          {/* QUIZ PHASE */}
-          {phase === 'quiz' && (
+          {/* LEARN ROUND 3: Quick flash - show word briefly, tap to see meaning, then next */}
+          {round === 'learn3' && (
+            <>
+              <div className="word-card" style={{ padding: '24px' }}>
+                <span className={`difficulty-badge ${difficultyClass}`}>{difficultyLabel}</span>
+                <div className="word-english" style={{ marginBottom: 12 }}>{word.english}</div>
+
+                {!revealed ? (
+                  <motion.button
+                    onClick={handleReveal}
+                    style={{
+                      background: 'linear-gradient(135deg, var(--primary), var(--primary-dark))',
+                      color: 'white',
+                      border: 'none',
+                      padding: '12px 32px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    想到了？点击验证 👀
+                  </motion.button>
+                ) : (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+                    <div className="word-phonetic">{word.phonetic}</div>
+                    <div className="word-chinese">{word.chinese}</div>
+                  </motion.div>
+                )}
+              </div>
+
+              {revealed && (
+                <motion.button
+                  className="nav-btn primary"
+                  onClick={handleNext}
+                  style={{ width: '100%' }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  {currentIndex < roundWords.length - 1 ? '下一个 →' : '开始测验 ✍️'}
+                </motion.button>
+              )}
+            </>
+          )}
+
+          {/* QUIZ ROUND */}
+          {round === 'quiz' && (
             <>
               <div style={{ marginBottom: 20 }}>
                 <div className="quiz-question-label">选择正确的中文释义</div>
@@ -379,7 +481,7 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
                   }
                   return (
                     <motion.button
-                      key={i}
+                      key={`${word.id}-${i}`}
                       className={className}
                       onClick={() => handleQuizAnswer(option)}
                       disabled={selectedAnswer !== null}
@@ -398,10 +500,10 @@ export const StudyView: React.FC<StudyViewProps> = ({ words, progress, onUpdateP
                   className={`quiz-feedback ${selectedAnswer === word.chinese ? 'correct' : 'wrong'}`}
                 >
                   {selectedAnswer === word.chinese
-                    ? '✅ 正确！这个单词你已经掌握了！'
+                    ? '✅ 正确！'
                     : (
                       <>
-                        ❌ 答错了，别担心，我们会再学一次
+                        ❌ 答错了，我们会再学一遍
                         <div className="correct-answer">正确答案：{word.chinese}</div>
                       </>
                     )
