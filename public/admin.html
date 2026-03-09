@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WordWise Admin - 实时监控</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #6C5CE7;
+      --primary-light: #A29BFE;
+      --success: #00B894;
+      --accent: #FF6B6B;
+      --warning: #FDCB6E;
+      --bg: #0F1117;
+      --bg-card: #1A1D2E;
+      --bg-card-hover: #222640;
+      --text: #E4E6EF;
+      --text-secondary: #8B8FA3;
+      --border: #2A2E42;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .header .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--success);
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 20px;
+      border: 1px solid var(--border);
+    }
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .stat-card .label {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .stat-card.purple .value { color: var(--primary-light); }
+    .stat-card.green .value { color: var(--success); }
+    .stat-card.orange .value { color: var(--accent); }
+    .stat-card.yellow .value { color: var(--warning); }
+
+    .section { margin-bottom: 28px; }
+    .section h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: var(--text);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-card);
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    th {
+      text-align: left;
+      padding: 14px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(108, 92, 231, 0.05);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 16px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-card-hover); }
+
+    .flag { margin-right: 6px; }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge.learn {
+      background: rgba(108, 92, 231, 0.15);
+      color: var(--primary-light);
+    }
+    .badge.correct {
+      background: rgba(0, 184, 148, 0.15);
+      color: var(--success);
+    }
+    .badge.wrong {
+      background: rgba(255, 107, 107, 0.15);
+      color: var(--accent);
+    }
+    .badge.active {
+      background: rgba(0, 184, 148, 0.15);
+      color: var(--success);
+    }
+
+    .ip-cell {
+      font-family: monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .time-ago {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .refresh-btn {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .refresh-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary-light);
+    }
+
+    .config-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .config-bar label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+    .config-bar input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: monospace;
+      flex: 1;
+      max-width: 400px;
+    }
+    .config-bar input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+    .config-bar button {
+      background: linear-gradient(135deg, var(--primary), #4834D4);
+      color: white;
+      border: none;
+      padding: 7px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    @media (max-width: 768px) {
+      body { padding: 16px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      table { font-size: 12px; }
+      th, td { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="config-bar">
+    <label>API URL:</label>
+    <input type="text" id="apiUrl" placeholder="https://wordwise-api.your-account.workers.dev" />
+    <button onclick="saveAndLoad()">连接</button>
+    <button class="refresh-btn" onclick="loadAll()">刷新</button>
+  </div>
+
+  <div class="header">
+    <h1>WordWise 实时监控</h1>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      <span id="activeCount">0 在线</span>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card purple"><div class="value" id="statSessions">-</div><div class="label">总用户数</div></div>
+    <div class="stat-card green"><div class="value" id="statActive">-</div><div class="label">当前活跃</div></div>
+    <div class="stat-card orange"><div class="value" id="statEvents">-</div><div class="label">学习事件</div></div>
+    <div class="stat-card yellow"><div class="value" id="statCountries">-</div><div class="label">国家/地区</div></div>
+  </div>
+
+  <div class="section">
+    <h2>用户列表</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>IP 地址</th>
+          <th>位置</th>
+          <th>学习单词数</th>
+          <th>正确 / 错误</th>
+          <th>最后活跃</th>
+        </tr>
+      </thead>
+      <tbody id="sessionsBody">
+        <tr><td colspan="5" class="empty">等待数据...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>实时学习动态</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>IP</th>
+          <th>位置</th>
+          <th>单词</th>
+          <th>中文</th>
+          <th>行为</th>
+          <th>等级</th>
+        </tr>
+      </thead>
+      <tbody id="eventsBody">
+        <tr><td colspan="7" class="empty">等待数据...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    let API = localStorage.getItem('wordwise_admin_api') || '';
+    const urlInput = document.getElementById('apiUrl');
+    urlInput.value = API;
+
+    function saveAndLoad() {
+      API = urlInput.value.replace(/\/+$/, '');
+      localStorage.setItem('wordwise_admin_api', API);
+      loadAll();
+    }
+
+    function countryFlag(code) {
+      if (!code || code === 'unknown') return '';
+      try {
+        return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0)));
+      } catch { return ''; }
+    }
+
+    function timeAgo(dateStr) {
+      const now = new Date();
+      const d = new Date(dateStr + 'Z');
+      const diff = Math.floor((now - d) / 1000);
+      if (diff < 60) return `${diff}秒前`;
+      if (diff < 3600) return `${Math.floor(diff/60)}分钟前`;
+      if (diff < 86400) return `${Math.floor(diff/3600)}小时前`;
+      return `${Math.floor(diff/86400)}天前`;
+    }
+
+    function actionBadge(action) {
+      if (action === 'learn') return '<span class="badge learn">学习</span>';
+      if (action === 'quiz_correct') return '<span class="badge correct">正确</span>';
+      if (action === 'quiz_wrong') return '<span class="badge wrong">错误</span>';
+      return action;
+    }
+
+    function levelText(level) {
+      const labels = ['新词', '学习中', '熟悉', '已掌握'];
+      const colors = ['#8B8FA3', '#A29BFE', '#FDCB6E', '#00B894'];
+      return `<span style="color:${colors[level] || colors[0]}">${labels[level] || level}</span>`;
+    }
+
+    async function loadAll() {
+      if (!API) return;
+      try {
+        await Promise.all([loadStats(), loadSessions(), loadEvents()]);
+      } catch (err) {
+        console.error('Load failed:', err);
+      }
+    }
+
+    async function loadStats() {
+      const res = await fetch(`${API}/api/admin/stats`);
+      const data = await res.json();
+      document.getElementById('statSessions').textContent = data.totalSessions;
+      document.getElementById('statActive').textContent = data.activeSessions;
+      document.getElementById('statEvents').textContent = data.totalEvents;
+      document.getElementById('statCountries').textContent = data.countries?.length || 0;
+      document.getElementById('activeCount').textContent = `${data.activeSessions} 在线`;
+    }
+
+    async function loadSessions() {
+      const res = await fetch(`${API}/api/admin/sessions`);
+      const data = await res.json();
+      const tbody = document.getElementById('sessionsBody');
+      if (!data.sessions?.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无用户数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.sessions.map(s => `
+        <tr>
+          <td class="ip-cell">${s.ip}</td>
+          <td>${countryFlag(s.country)} ${s.city || ''}, ${s.country || ''}</td>
+          <td>${s.words_studied}</td>
+          <td><span style="color:var(--success)">${s.correct_count || 0}</span> / <span style="color:var(--accent)">${s.wrong_count || 0}</span></td>
+          <td class="time-ago">${timeAgo(s.last_seen_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadEvents() {
+      const res = await fetch(`${API}/api/admin/events?limit=50`);
+      const data = await res.json();
+      const tbody = document.getElementById('eventsBody');
+      if (!data.events?.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无学习事件</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.events.map(e => `
+        <tr>
+          <td class="time-ago">${timeAgo(e.created_at)}</td>
+          <td class="ip-cell">${e.ip}</td>
+          <td>${countryFlag(e.country)} ${e.city || ''}</td>
+          <td><strong>${e.word_english}</strong></td>
+          <td>${e.word_chinese}</td>
+          <td>${actionBadge(e.action)}</td>
+          <td>${levelText(e.level)}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Auto-refresh every 10 seconds
+    if (API) loadAll();
+    setInterval(() => { if (API) loadAll(); }, 10000);
+  </script>
+</body>
+</html>

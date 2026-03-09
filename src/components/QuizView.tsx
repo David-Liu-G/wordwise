@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Word, QuizQuestion, WordProgress } from '../types';
 import { generateQuiz, updateWordProgress } from '../utils/spaced-repetition';
+import { trackEvent } from '../utils/tracker';
 
 interface QuizViewProps {
   words: Word[];
@@ -23,18 +24,22 @@ export const QuizView: React.FC<QuizViewProps> = ({ words, progress, onUpdatePro
     if (selectedAnswer) return;
     setSelectedAnswer(answer);
     const correct = answer === questions[currentIndex].correctAnswer;
+    const w = questions[currentIndex].word;
     setResults(prev => [...prev, correct]);
     const newProgress = updateWordProgress(progress, questions[currentIndex].word.id, correct);
     onUpdateProgress(newProgress);
+    trackEvent({ wordId: w.id, wordEnglish: w.english, wordChinese: w.chinese, action: correct ? 'quiz_correct' : 'quiz_wrong', level: newProgress[w.id]?.level || 0 });
   }, [selectedAnswer, currentIndex, questions, progress, onUpdateProgress]);
 
   const handleSpellingSubmit = useCallback(() => {
     if (spellingSubmitted) return;
     setSpellingSubmitted(true);
     const correct = spellingInput.trim().toLowerCase() === questions[currentIndex].correctAnswer.toLowerCase();
+    const w = questions[currentIndex].word;
     setResults(prev => [...prev, correct]);
     const newProgress = updateWordProgress(progress, questions[currentIndex].word.id, correct);
     onUpdateProgress(newProgress);
+    trackEvent({ wordId: w.id, wordEnglish: w.english, wordChinese: w.chinese, action: correct ? 'quiz_correct' : 'quiz_wrong', level: newProgress[w.id]?.level || 0 });
   }, [spellingSubmitted, spellingInput, currentIndex, questions, progress, onUpdateProgress]);
 
   const nextQuestion = () => {

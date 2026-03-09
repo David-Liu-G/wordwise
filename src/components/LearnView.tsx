@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Word } from '../types';
+import { trackEvent } from '../utils/tracker';
 
 interface LearnViewProps {
   words: Word[];
@@ -11,6 +12,7 @@ interface LearnViewProps {
 export const LearnView: React.FC<LearnViewProps> = ({ words, onBack, onComplete }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(0);
+  const trackedWords = useRef(new Set<string>());
 
   if (words.length === 0) {
     return (
@@ -32,6 +34,11 @@ export const LearnView: React.FC<LearnViewProps> = ({ words, onBack, onComplete 
   const difficultyClass = word.difficulty === 1 ? 'easy' : word.difficulty === 2 ? 'medium' : 'hard';
 
   const goNext = () => {
+    // Track word as learned
+    if (!trackedWords.current.has(word.id)) {
+      trackedWords.current.add(word.id);
+      trackEvent({ wordId: word.id, wordEnglish: word.english, wordChinese: word.chinese, action: 'learn', level: 0 });
+    }
     if (currentIndex < words.length - 1) {
       setDirection(1);
       setCurrentIndex(currentIndex + 1);
