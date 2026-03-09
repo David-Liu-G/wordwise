@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "WordWise",
+  "name": "WordWise - CET-6 背单词",
   "icons": [
     {
       "src": "favicon.ico",
