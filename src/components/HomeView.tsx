@@ -57,20 +57,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ progress, onNavigate, review
       </motion.div>
 
       <motion.div className="action-cards" variants={container}>
-        <motion.button className="action-card" variants={item} onClick={() => onNavigate('learn')}>
+        <motion.button className="action-card" variants={item} onClick={() => onNavigate('study')}>
           <div className="action-icon learn">📖</div>
           <div className="action-content">
-            <h3>今日学习</h3>
-            <p>学习今天的新单词</p>
-          </div>
-          <span className="action-arrow">→</span>
-        </motion.button>
-
-        <motion.button className="action-card" variants={item} onClick={() => onNavigate('quiz')}>
-          <div className="action-icon quiz">✍️</div>
-          <div className="action-content">
-            <h3>单词测验</h3>
-            <p>检验你的学习成果</p>
+            <h3>开始学习</h3>
+            <p>学习 + 测验，边学边练</p>
           </div>
           <span className="action-arrow">→</span>
         </motion.button>

@@ -7,7 +7,7 @@ import { wordBank } from './data/words';
 import { trackPageView } from './utils/tracker';
 import { Header } from './components/Header';
 import { HomeView } from './components/HomeView';
-import { LearnView } from './components/LearnView';
+import { StudyView } from './components/StudyView';
 import { QuizView } from './components/QuizView';
 import { StatsView } from './components/StatsView';
 
@@ -59,10 +59,6 @@ function App() {
 
   const reviewWords = useMemo(() => getWordsForReview(progress), [progress]);
 
-  const handleLearnComplete = useCallback(() => {
-    setView('quiz');
-  }, []);
-
   return (
     <div className="app">
       <Header view={view} onNavigate={setView} />
@@ -75,17 +71,9 @@ function App() {
         />
       )}
 
-      {view === 'learn' && (
-        <LearnView
+      {view === 'study' && (
+        <StudyView
           words={dailyWords}
-          onBack={() => setView('home')}
-          onComplete={handleLearnComplete}
-        />
-      )}
-
-      {view === 'quiz' && (
-        <QuizView
-          words={dailyWords.length > 0 ? dailyWords : reviewWords.slice(0, 8)}
           progress={progress}
           onUpdateProgress={handleUpdateProgress}
           onBack={() => setView('home')}
@@ -93,7 +81,7 @@ function App() {
       )}
 
       {view === 'review' && (
-        <QuizView
+        <StudyView
           words={reviewWords.slice(0, 10)}
           progress={progress}
           onUpdateProgress={handleUpdateProgress}

@@ -27,4 +27,4 @@ export interface QuizQuestion {
   correctAnswer: string;
 }
 
-export type AppView = 'home' | 'learn' | 'quiz' | 'review' | 'stats';
+export type AppView = 'home' | 'learn' | 'quiz' | 'review' | 'stats' | 'study';
